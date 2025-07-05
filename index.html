@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PDF 打印助手</title>
+  <meta charset="UTF-8">
+  <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/bitable/sdk/bitable-sdk-2.3.6.js"></script>
+  <style>
+    /* 一些简单的样式，让插件看起来更美观 */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      padding: 15px;
+      color: #333;
+    }
+    h3 {
+      margin-top: 0;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 15px;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h3>PDF 打印助手</h3>
+  <p>点击下方按钮，将根据当前视图的数据生成一份可供打印的PDF文件。</p>
+
+  <button id="printBtn">生成并打印</button>
+
+  <p id="status">准备就绪</p>
+
+  <script>
+    // --- 请修改这里！---
+    // 将下面的URL替换成您Replit后端服务的URL
+    const BACKEND_API_URL = 'https://851c382f-dd05-4a39-ab0e-19e81bf0bf5c-00-1gowrj6es78rb.pike.replit.dev/api/generate-pdf/';
+
+    const printBtn = document.getElementById('printBtn');
+    const statusEl = document.getElementById('status');
+
+    // 当按钮被点击时，执行这个函数
+    printBtn.onclick = async function() {
+      try {
+        statusEl.textContent = '1. 正在从表格获取数据...';
+        printBtn.disabled = true; // 禁用按钮，防止重复点击
+
+        // 使用飞书SDK获取当前选中的表格
+        const selection = await bitable.base.getSelection();
+        const table = await bitable.base.getTableById(selection.tableId);
+
+        // 获取当前视图下所有记录的ID列表
+        const recordIdList = await table.getRecordIdList({ viewId: selection.viewId });
+
+        // 遍历ID列表，获取每一条记录的详细内容
+        const records = [];
+        for (const recordId of recordIdList) {
+            records.push(await table.getRecord({ recordId }));
+        }
+
+        statusEl.textContent = `2. 已获取 ${records.length} 条记录，正在发送到后端生成PDF...`;
+
+        // 使用fetch API，将数据POST到我们的Django后端
+        const response = await fetch(BACKEND_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: records }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`服务器错误: ${response.status} ${response.statusText}`);
+        }
+
+        statusEl.textContent = '3. PDF生成成功，正在打开新标签页...';
+
+        // 将后端返回的PDF数据转换为一个临时的URL
+        const pdfBlob = await response.blob();
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+
+        // 在新的浏览器标签页中打开这个URL
+        window.open(pdfUrl, '_blank');
+
+        statusEl.textContent = '完成！PDF已在新标签页中打开。';
+
+      } catch (error) {
+        statusEl.textContent = '发生错误: ' + error.message;
+        console.error(error);
+      } finally {
+        printBtn.disabled = false; // 恢复按钮
+      }
+    }
+  </script>
+</body>
+</html>
