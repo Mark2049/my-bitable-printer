@@ -5,127 +5,77 @@
   <meta charset="UTF-8">
   <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/bitable/sdk/bitable-sdk-2.3.6.js"></script>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      padding: 15px;
-      color: #333;
-    }
-    h3 {
-      margin-top: 0;
-    }
-    button {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 4px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      min-width: 100px;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
-    }
-    #status {
-      margin-top: 15px;
-      font-size: 12px;
-      color: #666;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; padding: 15px; }
+    button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+    button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    #status { margin-top: 15px; font-size: 12px; color: #666; }
   </style>
 </head>
 <body>
   <h3>PDF 打印助手</h3>
-  <p>点击下方按钮，将根据当前视图的数据生成一份可供打印的PDF文件。</p>
-  
+  <p>点击下方按钮，生成当前视图的PDF文件。</p>
   <button id="printBtn" disabled>正在初始化...</button>
-  
   <p id="status"></p>
 
   <script>
-    // --- 这是我们全新的、更可靠的逻辑 ---
+    // **请再次确认这里是您正确的 Replit 后端 URL！**
+    const BACKEND_API_URL = 'https://851c382f-dd05-4a39-ab0e-19e81bf0bf5c-00-1gowrj6es78rb.pike.replit.dev/api/generate-pdf/';
 
-    // 1. 将打印功能封装成一个独立的函数
-    async function handlePrint() {
-      const printBtn = document.getElementById('printBtn');
-      const statusEl = document.getElementById('status');
-      // **请务必再次填入您Replit后端的URL**
-      const BACKEND_API_URL = 'https://851c382f-dd05-4a39-ab0e-19e81bf0bf5c-00-1gowrj6es78rb.pike.replit.dev/api/generate-pdf/';
+    const printBtn = document.getElementById('printBtn');
+    const statusEl = document.getElementById('status');
 
-      try {
-        statusEl.textContent = '1. 正在从表格获取数据...';
-        printBtn.disabled = true;
+    // 核心逻辑：我们不再使用复杂的等待，而是把所有操作都放到 bitable.bridge.onReady() 中
+    // 这是飞书官方推荐的、最可靠的初始化方式
+    bitable.bridge.onReady(async () => {
+      // 当这段代码运行时，就代表和飞书的连接已经100%建立好了
+      statusEl.textContent = '准备就绪';
+      printBtn.textContent = '生成并打印';
+      printBtn.disabled = false;
 
-        const selection = await bitable.base.getSelection();
-        const table = await bitable.base.getTableById(selection.tableId);
-        const recordIdList = await table.getRecordIdList({ viewId: selection.viewId });
-        
-        const records = [];
-        for (const recordId of recordIdList) {
-            records.push(await table.getRecord({ recordId }));
+      // 把点击事件放进 onReady 里，确保万无一失
+      printBtn.onclick = async function() {
+        try {
+          statusEl.textContent = '1. 正在获取数据...';
+          printBtn.disabled = true;
+
+          // 从已经建立好的连接中获取所有需要的信息
+          const selection = await bitable.base.getSelection();
+          const table = await bitable.base.getTableById(selection.tableId);
+          const recordIdList = await table.getRecordIdList({ viewId: selection.viewId });
+          
+          const records = [];
+          for (const recordId of recordIdList) {
+              records.push(await table.getRecord({ recordId }));
+          }
+          
+          statusEl.textContent = `2. 已获取 ${records.length} 条记录，正在发送到后端...`;
+
+          // 发送到我们的后端
+          const response = await fetch(BACKEND_API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ records: records }),
+          });
+
+          if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`服务器错误: ${response.status} ${errorText}`);
+          }
+
+          statusEl.textContent = '3. PDF生成成功，正在打开新标签页...';
+          const pdfBlob = await response.blob();
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+          window.open(pdfUrl, '_blank');
+          statusEl.textContent = '完成！';
+
+        } catch (error) {
+          statusEl.textContent = '发生错误: ' + error.message;
+        } finally {
+          printBtn.disabled = false;
+          printBtn.textContent = '生成并打印';
         }
-        
-        statusEl.textContent = `2. 已获取 ${records.length} 条记录，正在发送到后端生成PDF...`;
-
-        const response = await fetch(BACKEND_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: records }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`服务器错误: ${response.status} ${errorText}`);
-        }
-
-        statusEl.textContent = '3. PDF生成成功，正在打开新标签页...';
-        const pdfBlob = await response.blob();
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-        window.open(pdfUrl, '_blank');
-        statusEl.textContent = '完成！PDF已在新标签页中打开。';
-
-      } catch (error) {
-        statusEl.textContent = '发生错误: ' + error.message;
-        console.error(error);
-      } finally {
-        printBtn.disabled = false;
-        printBtn.textContent = '生成并打印';
-      }
-    }
-
-    // 2. 这是我们的主初始化函数，它会“耐心等待”bitable准备好
-    async function initializeApp() {
-      const printBtn = document.getElementById('printBtn');
-      const statusEl = document.getElementById('status');
-      let maxTries = 100; // 最多等待10秒 (100次 * 100毫秒)
-      
-      // 使用一个循环，每隔100毫秒检查一次bitable是否就绪
-      while (typeof bitable === 'undefined' && maxTries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        maxTries--;
-      }
-
-      // 3. 等待结束后，进行判断
-      if (typeof bitable !== 'undefined') {
-        // 成功！bitable已准备好
-        statusEl.textContent = '准备就绪';
-        printBtn.textContent = '生成并打印';
-        printBtn.disabled = false;
-        // 在这里才把点击事件绑定到按钮上
-        printBtn.onclick = handlePrint;
-      } else {
-        // 失败，超时了
-        statusEl.textContent = '错误：初始化插件环境失败，请刷新重试。';
-        printBtn.textContent = '初始化失败';
-      }
-    }
-
-    // 4. 运行我们的初始化函数
-    initializeApp();
+      };
+    });
   </script>
 </body>
 </html>
