@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <script src="https://lf1-cdn-tos.bytegoofy.com/goofy/bitable/sdk/bitable-sdk-2.3.6.js"></script>
   <style>
-    /* 一些简单的样式，让插件看起来更美观 */
+    /* 样式部分保持不变 */
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
       padding: 15px;
@@ -47,63 +47,67 @@
   <p id="status">准备就绪</p>
 
   <script>
-    // --- 请修改这里！---
-    // 将下面的URL替换成您Replit后端服务的URL
-    const BACKEND_API_URL = 'https://851c382f-dd05-4a39-ab0e-19e81bf0bf5c-00-1gowrj6es78rb.pike.replit.dev/api/generate-pdf/';
+    // --- 这里是修正的部分 ---
+    // 我们把所有代码都放进一个事件监听器里
+    // 这会确保我们的代码在整个HTML页面都加载和解析完毕后才运行
+    window.addEventListener('DOMContentLoaded', function() {
 
-    const printBtn = document.getElementById('printBtn');
-    const statusEl = document.getElementById('status');
+      // 将下面的URL替换成您Replit后端服务的URL
+      const BACKEND_API_URL = 'https://YOUR_REPLIT_APP_NAME.replit.dev/api/generate-pdf/';
 
-    // 当按钮被点击时，执行这个函数
-    printBtn.onclick = async function() {
-      try {
-        statusEl.textContent = '1. 正在从表格获取数据...';
-        printBtn.disabled = true; // 禁用按钮，防止重复点击
+      const printBtn = document.getElementById('printBtn');
+      const statusEl = document.getElementById('status');
 
-        // 使用飞书SDK获取当前选中的表格
-        const selection = await bitable.base.getSelection();
-        const table = await bitable.base.getTableById(selection.tableId);
-
-        // 获取当前视图下所有记录的ID列表
-        const recordIdList = await table.getRecordIdList({ viewId: selection.viewId });
-
-        // 遍历ID列表，获取每一条记录的详细内容
-        const records = [];
-        for (const recordId of recordIdList) {
-            records.push(await table.getRecord({ recordId }));
+      // 当按钮被点击时，执行这个函数
+      printBtn.onclick = async function() {
+        // 在使用 bitable 前，先检查它是否存在
+        if (typeof bitable === 'undefined') {
+          statusEl.textContent = '错误：无法连接到飞书表格环境，请刷新插件重试。';
+          return;
         }
 
-        statusEl.textContent = `2. 已获取 ${records.length} 条记录，正在发送到后端生成PDF...`;
+        try {
+          statusEl.textContent = '1. 正在从表格获取数据...';
+          printBtn.disabled = true;
 
-        // 使用fetch API，将数据POST到我们的Django后端
-        const response = await fetch(BACKEND_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: records }),
-        });
+          const selection = await bitable.base.getSelection();
+          const table = await bitable.base.getTableById(selection.tableId);
+          const recordIdList = await table.getRecordIdList({ viewId: selection.viewId });
 
-        if (!response.ok) {
-            throw new Error(`服务器错误: ${response.status} ${response.statusText}`);
+          const records = [];
+          for (const recordId of recordIdList) {
+              records.push(await table.getRecord({ recordId }));
+          }
+
+          statusEl.textContent = `2. 已获取 ${records.length} 条记录，正在发送到后端生成PDF...`;
+
+          const response = await fetch(BACKEND_API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ records: records }),
+          });
+
+          if (!response.ok) {
+              throw new Error(`服务器错误: ${response.status} ${response.statusText}`);
+          }
+
+          statusEl.textContent = '3. PDF生成成功，正在打开新标签页...';
+
+          const pdfBlob = await response.blob();
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+
+          window.open(pdfUrl, '_blank');
+
+          statusEl.textContent = '完成！PDF已在新标签页中打开。';
+
+        } catch (error) {
+          statusEl.textContent = '发生错误: ' + error.message;
+          console.error(error);
+        } finally {
+          printBtn.disabled = false;
         }
-
-        statusEl.textContent = '3. PDF生成成功，正在打开新标签页...';
-
-        // 将后端返回的PDF数据转换为一个临时的URL
-        const pdfBlob = await response.blob();
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-
-        // 在新的浏览器标签页中打开这个URL
-        window.open(pdfUrl, '_blank');
-
-        statusEl.textContent = '完成！PDF已在新标签页中打开。';
-
-      } catch (error) {
-        statusEl.textContent = '发生错误: ' + error.message;
-        console.error(error);
-      } finally {
-        printBtn.disabled = false; // 恢复按钮
       }
-    }
+    });
   </script>
 </body>
 </html>
